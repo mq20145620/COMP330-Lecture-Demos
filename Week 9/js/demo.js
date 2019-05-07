@@ -15,7 +15,7 @@ varying vec4 v_viewPosition;
 
 void main() {
     // convert normal to world coordinates
-    v_normal = u_worldMatrix * a_normal;
+    v_normal = u_worldMatrix * vec4(a_normal.xyz, 0);
 
     // calculate view position for specular shading
     v_viewPosition = u_viewMatrix * u_worldMatrix * a_position;
@@ -31,6 +31,7 @@ uniform vec3 u_lightIntensity;
 uniform vec3 u_ambientIntensity;   
 uniform vec3 u_diffuseColour;   
 uniform vec3 u_specularColour;   
+uniform float u_specularExponent;   
 
 varying vec4 v_normal;
 varying vec4 v_viewPosition;
@@ -44,7 +45,9 @@ void main() {
 
     vec3 ambient = u_ambientIntensity * u_diffuseColour;
     vec3 diffuse = u_lightIntensity * u_diffuseColour * max(0.0, dot(s, n));
-    vec3 specular = u_lightIntensity * u_specularColour * dot(r, v);
+    vec3 specular = u_lightIntensity * u_specularColour * pow(max(0.0, dot(r, v)), u_specularExponent);
+
+    // gl_FragColor = vec4(abs(n),1); 
 
     gl_FragColor = vec4(ambient + diffuse + specular, 1); 
 }
@@ -101,7 +104,7 @@ function main() {
     // enable depth testing & backface culling
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.FRONT);
+    gl.cullFace(gl.BACK);
 
     // create GLSL shaders, upload the GLSL source, compile the shaders
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
@@ -130,20 +133,20 @@ function main() {
     let vertexNormals = [];
     let faceNormals = [];
 
-    const nSteps = 16;
+    const nSteps = 32;
     const angle = Math.PI * 2 / nSteps;
 
     const a = glMatrix.vec3.create();
     const b = glMatrix.vec3.create();
     const faceNormal = glMatrix.vec3.create();
 
-    for (let i = 0; i < nSteps; i++) {
+    for (let i = 0; i < nSteps/2; i++) {
         let theta = i * angle;
 
         let z0 = Math.cos(theta);
         let z1 = Math.cos(theta + angle);
 
-        for (let j = 0; j < nSteps/2; j++) {
+        for (let j = 0; j < nSteps; j++) {
             let phi = j * angle - Math.PI / 2;
 
             let x00 = Math.sin(theta) * Math.cos(phi);
@@ -160,40 +163,44 @@ function main() {
             let p10 = [x10, y10, z1];
             let p11 = [x11, y11, z1];
 
-            points.push(...p00);
-            points.push(...p10);
-            points.push(...p11);
-
-            vertexNormals.push(...p00);
-            vertexNormals.push(...p10);
-            vertexNormals.push(...p11);
-
-            // compute the face normal n = (p1 - p0) x (p2 - p0)
-            glMatrix.vec3.sub(a, p10, p00);
-            glMatrix.vec3.sub(b, p11, p00);
-            glMatrix.vec3.cross(faceNormal, a, b);
+            if (i < nSteps-1) {
+                points.push(...p00);
+                points.push(...p10);
+                points.push(...p11);
     
-            faceNormals.push(...faceNormal);    // same for all three vertices
-            faceNormals.push(...faceNormal);
-            faceNormals.push(...faceNormal);
-
-            points.push(...p11);
-            points.push(...p01);
-            points.push(...p00);
-
-            vertexNormals.push(...p11);
-            vertexNormals.push(...p01);
-            vertexNormals.push(...p00);
-
-            // compute the face normal n = (p1 - p0) x (p2 - p0)
-            glMatrix.vec3.sub(a, p01, p11);
-            glMatrix.vec3.sub(b, p00, p11);
-            glMatrix.vec3.cross(faceNormal, a, b);
+                vertexNormals.push(...p00);
+                vertexNormals.push(...p10);
+                vertexNormals.push(...p11);
     
-            faceNormals.push(...faceNormal);    // same for all three vertices
-            faceNormals.push(...faceNormal);
-            faceNormals.push(...faceNormal);
-            
+                // compute the face normal n = (p1 - p0) x (p2 - p0)
+                glMatrix.vec3.sub(a, p10, p00);
+                glMatrix.vec3.sub(b, p11, p00);
+                glMatrix.vec3.cross(faceNormal, a, b);
+        
+                faceNormals.push(...faceNormal);    // same for all three vertices
+                faceNormals.push(...faceNormal);
+                faceNormals.push(...faceNormal);    
+            }
+
+            if (i > 0) {
+                points.push(...p11);
+                points.push(...p01);
+                points.push(...p00);
+    
+                vertexNormals.push(...p11);
+                vertexNormals.push(...p01);
+                vertexNormals.push(...p00);
+    
+                // // compute the face normal n = (p1 - p0) x (p2 - p0)
+                // glMatrix.vec3.sub(a, p01, p11);
+                // glMatrix.vec3.sub(b, p00, p11);
+                // glMatrix.vec3.cross(faceNormal, a, b);
+        
+                faceNormals.push(...faceNormal);    // same for all three vertices
+                faceNormals.push(...faceNormal);
+                faceNormals.push(...faceNormal);    
+            }
+
         }
     }
 
@@ -212,31 +219,50 @@ function main() {
 
     // === Per Frame operations ===
 
-    const lightDirection = [0,1,1];
-    let lightRotationSpeed = 2 * Math.PI / 30; // radians per second 
+    const lightRotation = [0,0,0];
+    const lightRotationSpeed = 2 * Math.PI / 10; // radians per second 
+
+    const cameraRotation = [0,0,0];
+    const cameraRotationSpeed = 2 * Math.PI / 10; // radians per second 
 
     // update objects in the scene
     let update = function(deltaTime) {
         check(isNumber(deltaTime));
 
         if (inputManager.leftPressed) {
-            glMatrix.vec3.rotateY(lightDirection, lightDirection, [0,0,0], -lightRotationSpeed * deltaTime);
+            lightRotation[1] -= lightRotationSpeed * deltaTime;
         }
         if (inputManager.rightPressed) {
-            glMatrix.vec3.rotateY(lightDirection, lightDirection, [0,0,0], lightRotationSpeed * deltaTime);
+            lightRotation[1] += lightRotationSpeed * deltaTime;
         }
         if (inputManager.upPressed) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, [0,0,0], lightRotationSpeed * deltaTime);
+            lightRotation[0] -= lightRotationSpeed * deltaTime;
         }
         if (inputManager.downPressed) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, [0,0,0], -lightRotationSpeed * deltaTime);
+            lightRotation[0] += lightRotationSpeed * deltaTime;
         }
+
+        // if (inputManager.leftPressed) {
+        //     cameraRotation[1] += cameraRotationSpeed * deltaTime;
+        // }
+        // if (inputManager.rightPressed) {
+        //     cameraRotation[1] -= cameraRotationSpeed * deltaTime;
+        // }
+        // if (inputManager.upPressed) {
+        //     cameraRotation[0] -= cameraRotationSpeed * deltaTime;
+        // }
+        // if (inputManager.downPressed) {
+        //     cameraRotation[0] += cameraRotationSpeed * deltaTime;
+        // }
+
+
     };
 
     // allocate matrices
     const projectionMatrix = glMatrix.mat4.create();
     const viewMatrix = glMatrix.mat4.create();
     const worldMatrix = glMatrix.mat4.create();
+    const lightDirection = [1,0,0];
 
     // redraw the scene
     let render = function() {
@@ -258,6 +284,9 @@ function main() {
             const offset = [0,0,-2];
             glMatrix.mat4.identity(viewMatrix);
             glMatrix.mat4.translate(viewMatrix, viewMatrix, offset);
+            glMatrix.mat4.rotateY(viewMatrix, viewMatrix, cameraRotation[1]);
+            glMatrix.mat4.rotateX(viewMatrix, viewMatrix, cameraRotation[0]);
+            glMatrix.mat4.rotateZ(viewMatrix, viewMatrix, cameraRotation[2]);
             gl.uniformMatrix4fv(shader["u_viewMatrix"], false, viewMatrix);
         }
 
@@ -270,8 +299,10 @@ function main() {
             const diffuseColour = new Float32Array([0.0, 0.0, 1.0]);
             gl.uniform3fv(shader["u_diffuseColour"], diffuseColour);
 
-            const specularColour = new Float32Array([0.0, 0.0, 0.0]);
+            const specularColour = new Float32Array([1.0, 1.0, 1.0]);
             gl.uniform3fv(shader["u_specularColour"], specularColour);            
+
+            gl.uniform1f(shader["u_specularExponent"], 20.0);
         }
 
         {
@@ -281,13 +312,17 @@ function main() {
             const ambientIntensity = new Float32Array([0.2, 0.2, 0.2]);
             gl.uniform3fv(shader["u_ambientIntensity"], ambientIntensity);
 
+            glMatrix.vec3.set(lightDirection, 0, 0, 1);
+            glMatrix.vec3.rotateY(lightDirection, lightDirection, [0,0,0], lightRotation[1]);
+            glMatrix.vec3.rotateX(lightDirection, lightDirection, [0,0,0], lightRotation[0]);
+            glMatrix.vec3.rotateZ(lightDirection, lightDirection, [0,0,0], lightRotation[2]);
             gl.uniform3fv(shader["u_lightDirection"], lightDirection);
         }
 
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.vertexAttribPointer(shader["a_position"], 3, gl.FLOAT, false, 0, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, faceNormalBuffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
         gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
 
         gl.drawArrays(gl.TRIANGLES, 0, points.length / 3);       
