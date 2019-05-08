@@ -9,16 +9,21 @@ attribute vec4 a_normal;
 uniform mat4 u_worldMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_projectionMatrix;
+uniform vec3 u_lightDirection;
 
 varying vec4 v_normal;
 varying vec4 v_viewPosition;
+varying vec4 v_light;
 
 void main() {
-    // convert normal to world coordinates
-    v_normal = u_worldMatrix * vec4(a_normal.xyz, 0);
+    // convert normal to view coordinates
+    v_normal = u_viewMatrix * u_worldMatrix * vec4(a_normal.xyz, 0);
 
     // calculate view position for specular shading
     v_viewPosition = u_viewMatrix * u_worldMatrix * a_position;
+
+    // calculate light direction in view coordinates
+    v_light = u_viewMatrix * vec4(u_lightDirection,0);
 
     gl_Position = u_projectionMatrix * u_viewMatrix * u_worldMatrix * a_position;
 }
@@ -26,7 +31,6 @@ void main() {
 
 const fragmentShaderSource = `
 precision mediump float;
-uniform vec3 u_lightDirection;   
 uniform vec3 u_lightIntensity;   
 uniform vec3 u_ambientIntensity;   
 uniform vec3 u_diffuseColour;   
@@ -35,19 +39,24 @@ uniform float u_specularExponent;
 
 varying vec4 v_normal;
 varying vec4 v_viewPosition;
+varying vec4 v_light;
 
 void main() {
     // normalise the vectors
-    vec3 s = normalize(u_lightDirection);
+    vec3 s = normalize(v_light.xyz);
     vec3 n = normalize(v_normal.xyz);
-    vec3 v = -normalize(v_viewPosition.xyz);
-    vec3 r = -s + 2.0 * dot(s,n) * n;
+    vec3 v = normalize(-v_viewPosition.xyz);
+    vec3 r = -reflect(s,n);
 
     vec3 ambient = u_ambientIntensity * u_diffuseColour;
     vec3 diffuse = u_lightIntensity * u_diffuseColour * max(0.0, dot(s, n));
     vec3 specular = u_lightIntensity * u_specularColour * pow(max(0.0, dot(r, v)), u_specularExponent);
 
+    //gl_FragColor = vec4(1,0,0,1); 
+
     // gl_FragColor = vec4(abs(n),1); 
+    // gl_FragColor = vec4(s,1); 
+    // gl_FragColor = vec4(dot(r,v),0,0,1); 
 
     gl_FragColor = vec4(ambient + diffuse + specular, 1); 
 }
@@ -133,7 +142,7 @@ function main() {
     let vertexNormals = [];
     let faceNormals = [];
 
-    const nSteps = 32;
+    const nSteps = 16;
     const angle = Math.PI * 2 / nSteps;
 
     const a = glMatrix.vec3.create();
@@ -191,10 +200,10 @@ function main() {
                 vertexNormals.push(...p01);
                 vertexNormals.push(...p00);
     
-                // // compute the face normal n = (p1 - p0) x (p2 - p0)
-                // glMatrix.vec3.sub(a, p01, p11);
-                // glMatrix.vec3.sub(b, p00, p11);
-                // glMatrix.vec3.cross(faceNormal, a, b);
+                // compute the face normal n = (p1 - p0) x (p2 - p0)
+                glMatrix.vec3.sub(a, p01, p11);
+                glMatrix.vec3.sub(b, p00, p11);
+                glMatrix.vec3.cross(faceNormal, a, b);
         
                 faceNormals.push(...faceNormal);    // same for all three vertices
                 faceNormals.push(...faceNormal);
@@ -229,31 +238,31 @@ function main() {
     let update = function(deltaTime) {
         check(isNumber(deltaTime));
 
-        if (inputManager.leftPressed) {
+        if (inputManager.keyPressed["ArrowLeft"]) {
             lightRotation[1] -= lightRotationSpeed * deltaTime;
         }
-        if (inputManager.rightPressed) {
+        if (inputManager.keyPressed["ArrowRight"]) {
             lightRotation[1] += lightRotationSpeed * deltaTime;
         }
-        if (inputManager.upPressed) {
+        if (inputManager.keyPressed["ArrowUp"]) {
             lightRotation[0] -= lightRotationSpeed * deltaTime;
         }
-        if (inputManager.downPressed) {
+        if (inputManager.keyPressed["ArrowDown"]) {
             lightRotation[0] += lightRotationSpeed * deltaTime;
         }
 
-        // if (inputManager.leftPressed) {
-        //     cameraRotation[1] += cameraRotationSpeed * deltaTime;
-        // }
-        // if (inputManager.rightPressed) {
-        //     cameraRotation[1] -= cameraRotationSpeed * deltaTime;
-        // }
-        // if (inputManager.upPressed) {
-        //     cameraRotation[0] -= cameraRotationSpeed * deltaTime;
-        // }
-        // if (inputManager.downPressed) {
-        //     cameraRotation[0] += cameraRotationSpeed * deltaTime;
-        // }
+        if (inputManager.keyPressed["KeyA"]) {
+            cameraRotation[1] += cameraRotationSpeed * deltaTime;
+        }
+        if (inputManager.keyPressed["KeyD"]) {
+            cameraRotation[1] -= cameraRotationSpeed * deltaTime;
+        }
+        if (inputManager.keyPressed["KeyW"]) {
+            cameraRotation[0] += cameraRotationSpeed * deltaTime;
+        }
+        if (inputManager.keyPressed["KeyS"]) {
+            cameraRotation[0] -= cameraRotationSpeed * deltaTime;
+        }
 
 
     };
@@ -322,7 +331,10 @@ function main() {
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.vertexAttribPointer(shader["a_position"], 3, gl.FLOAT, false, 0, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+        // gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, faceNormalBuffer);
         gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
 
         gl.drawArrays(gl.TRIANGLES, 0, points.length / 3);       

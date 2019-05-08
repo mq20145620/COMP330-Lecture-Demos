@@ -2,10 +2,7 @@
 
 class Input {
     constructor() {
-        this.leftPressed = false;
-        this.rightPressed = false;
-        this.upPressed = false;
-        this.downPress = false;
+        this.keyPressed = {};
 
         this.mouseClicked = false;
         this.mouseClickedPos = null;
@@ -23,51 +20,11 @@ class Input {
     }
 
     onKeyDown(event) {
-        switch (event.code) {
-            case "KeyA": 
-            case "ArrowLeft": 
-                this.leftPressed = true;
-                break;
-
-            case "KeyD": 
-            case "ArrowRight": 
-                this.rightPressed = true;
-                break;
-
-            case "KeyS":
-            case "ArrowDown":
-                this.downPressed = true;
-                break;
-
-            case "KeyW":
-            case "ArrowUp":
-                this.upPressed = true;
-                break;
-        }
+        this.keyPressed[event.code] = true;
     }
 
     onKeyUp(event) {
-        switch (event.code) {
-            case "KeyA":
-            case "ArrowLeft": 
-                this.leftPressed = false;
-                break;
-
-            case "KeyD":
-            case "ArrowRight": 
-                this.rightPressed = false;
-                break;
-
-            case "KeyS":
-            case "ArrowDown":
-                this.downPressed = false;
-                break;
-
-            case "KeyW":
-            case "ArrowUp":
-                this.upPressed = false;
-                break;
-        }
+        this.keyPressed[event.code] = false;
     }
 
     onMouseDown(event) {
