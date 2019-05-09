@@ -9,21 +9,16 @@ attribute vec4 a_normal;
 uniform mat4 u_worldMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_projectionMatrix;
-uniform vec3 u_lightDirection;
 
 varying vec4 v_normal;
-varying vec4 v_viewPosition;
-varying vec4 v_light;
+varying vec4 v_position;
 
 void main() {
-    // convert normal to view coordinates
-    v_normal = u_viewMatrix * u_worldMatrix * vec4(a_normal.xyz, 0);
+    // convert normal to world coordinates
+    v_normal = u_worldMatrix * vec4(a_normal.xyz, 0);
 
-    // calculate view position for specular shading
-    v_viewPosition = u_viewMatrix * u_worldMatrix * a_position;
-
-    // calculate light direction in view coordinates
-    v_light = u_viewMatrix * vec4(u_lightDirection,0);
+    // compute position in world coordinates
+    v_position = u_worldMatrix * a_position;
 
     gl_Position = u_projectionMatrix * u_viewMatrix * u_worldMatrix * a_position;
 }
@@ -31,6 +26,9 @@ void main() {
 
 const fragmentShaderSource = `
 precision mediump float;
+
+uniform vec3 u_cameraPosition;
+uniform vec3 u_lightDirection;
 uniform vec3 u_lightIntensity;   
 uniform vec3 u_ambientIntensity;   
 uniform vec3 u_diffuseColour;   
@@ -38,14 +36,13 @@ uniform vec3 u_specularColour;
 uniform float u_specularExponent;   
 
 varying vec4 v_normal;
-varying vec4 v_viewPosition;
-varying vec4 v_light;
+varying vec4 v_position;
 
 void main() {
     // normalise the vectors
-    vec3 s = normalize(v_light.xyz);
+    vec3 s = normalize(u_lightDirection);
     vec3 n = normalize(v_normal.xyz);
-    vec3 v = normalize(-v_viewPosition.xyz);
+    vec3 v = normalize(u_cameraPosition - v_position.xyz);
     vec3 r = -reflect(s,n);
 
     vec3 ambient = u_ambientIntensity * u_diffuseColour;
@@ -56,7 +53,7 @@ void main() {
 
     // gl_FragColor = vec4(abs(n),1); 
     // gl_FragColor = vec4(s,1); 
-    // gl_FragColor = vec4(dot(r,v),0,0,1); 
+    gl_FragColor = vec4(dot(r,v),0,0,1); 
 
     gl_FragColor = vec4(ambient + diffuse + specular, 1); 
 }
@@ -245,10 +242,10 @@ function main() {
             lightRotation[1] += lightRotationSpeed * deltaTime;
         }
         if (inputManager.keyPressed["ArrowUp"]) {
-            lightRotation[0] -= lightRotationSpeed * deltaTime;
+            lightRotation[0] += lightRotationSpeed * deltaTime;
         }
         if (inputManager.keyPressed["ArrowDown"]) {
-            lightRotation[0] += lightRotationSpeed * deltaTime;
+            lightRotation[0] -= lightRotationSpeed * deltaTime;
         }
 
         if (inputManager.keyPressed["KeyA"]) {
@@ -258,10 +255,10 @@ function main() {
             cameraRotation[1] -= cameraRotationSpeed * deltaTime;
         }
         if (inputManager.keyPressed["KeyW"]) {
-            cameraRotation[0] += cameraRotationSpeed * deltaTime;
+            cameraRotation[0] -= cameraRotationSpeed * deltaTime;
         }
         if (inputManager.keyPressed["KeyS"]) {
-            cameraRotation[0] -= cameraRotationSpeed * deltaTime;
+            cameraRotation[0] += cameraRotationSpeed * deltaTime;
         }
 
 
@@ -271,7 +268,8 @@ function main() {
     const projectionMatrix = glMatrix.mat4.create();
     const viewMatrix = glMatrix.mat4.create();
     const worldMatrix = glMatrix.mat4.create();
-    const lightDirection = [1,0,0];
+    const lightDirection = glMatrix.vec3.create();
+    const cameraPosition = glMatrix.vec3.create();
 
     // redraw the scene
     let render = function() {
@@ -289,31 +287,27 @@ function main() {
             gl.uniformMatrix4fv(shader["u_projectionMatrix"], false, projectionMatrix);
         }
 
+        // set up view matrix and camera position
         {
-            const offset = [0,0,-2];
-            glMatrix.mat4.identity(viewMatrix);
-            glMatrix.mat4.translate(viewMatrix, viewMatrix, offset);
-            glMatrix.mat4.rotateY(viewMatrix, viewMatrix, cameraRotation[1]);
-            glMatrix.mat4.rotateX(viewMatrix, viewMatrix, cameraRotation[0]);
-            glMatrix.mat4.rotateZ(viewMatrix, viewMatrix, cameraRotation[2]);
+            glMatrix.vec3.set(cameraPosition, 0, 0, 2);
+            glMatrix.vec3.rotateZ(cameraPosition, cameraPosition, [0,0,0], cameraRotation[2]);
+            glMatrix.vec3.rotateX(cameraPosition, cameraPosition, [0,0,0], cameraRotation[0]);
+            glMatrix.vec3.rotateY(cameraPosition, cameraPosition, [0,0,0], cameraRotation[1]);
+            gl.uniform3fv(shader["u_cameraPosition"], cameraPosition);
+
+            const target = [0,0,0];
+            const up = [0,1,0];
+            glMatrix.mat4.lookAt(viewMatrix, cameraPosition, target, up);
             gl.uniformMatrix4fv(shader["u_viewMatrix"], false, viewMatrix);
         }
 
+        // set up world matrix
         {            
             glMatrix.mat4.identity(worldMatrix);
             gl.uniformMatrix4fv(shader["u_worldMatrix"], false, worldMatrix);
         }
 
-        {
-            const diffuseColour = new Float32Array([0.0, 0.0, 1.0]);
-            gl.uniform3fv(shader["u_diffuseColour"], diffuseColour);
-
-            const specularColour = new Float32Array([1.0, 1.0, 1.0]);
-            gl.uniform3fv(shader["u_specularColour"], specularColour);            
-
-            gl.uniform1f(shader["u_specularExponent"], 20.0);
-        }
-
+        // set up lights
         {
             const lightIntensity = new Float32Array([1.0, 1.0, 1.0]);
             gl.uniform3fv(shader["u_lightIntensity"], lightIntensity);
@@ -328,16 +322,28 @@ function main() {
             gl.uniform3fv(shader["u_lightDirection"], lightDirection);
         }
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.vertexAttribPointer(shader["a_position"], 3, gl.FLOAT, false, 0, 0);
+        // set sphere materials
+        {
+            const diffuseColour = new Float32Array([0.0, 0.0, 1.0]);
+            gl.uniform3fv(shader["u_diffuseColour"], diffuseColour);
 
-        // gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
-        // gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
+            const specularColour = new Float32Array([1.0, 1.0, 1.0]);
+            gl.uniform3fv(shader["u_specularColour"], specularColour);            
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, faceNormalBuffer);
-        gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
+            gl.uniform1f(shader["u_specularExponent"], 20.0);
+        }
 
-        gl.drawArrays(gl.TRIANGLES, 0, points.length / 3);       
+        // draw sphere
+        {
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.vertexAttribPointer(shader["a_position"], 3, gl.FLOAT, false, 0, 0);
+    
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);     // use vertex normals
+            // gl.bindBuffer(gl.ARRAY_BUFFER, faceNormalBuffer);    // use face normals
+            gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
+    
+            gl.drawArrays(gl.TRIANGLES, 0, points.length / 3);           
+        }
 
     };
 
