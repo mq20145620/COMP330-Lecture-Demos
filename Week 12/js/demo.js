@@ -2,6 +2,51 @@
 
 Math.TAU = 2 * Math.PI;
 
+function createFrameBuffer(gl, width, height) {
+  
+    // Step 1: Create a frame buffer object
+    const frameBuffer = gl.createFramebuffer();
+  
+    // Step 2: Create and initialize a texture buffer to hold the colors.
+    const colorBuffer = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, colorBuffer);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0,
+                                    gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  
+    // Step 3: Create and initialize a texture buffer to hold the depth values.
+    // Note: the WEBGL_depth_texture extension is required for this to work
+    //       and for the gl.DEPTH_COMPONENT texture format to be supported.
+    const depthBuffer = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, depthBuffer);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, width, height, 0,
+                                    gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  
+    // Step 4: Attach the specific buffers to the frame buffer.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorBuffer, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT,  gl.TEXTURE_2D, depthBuffer, 0);
+  
+    // Step 5: Verify that the frame buffer is valid.
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+        console.error("The created frame buffer is invalid: " + status.toString());
+    }
+  
+    // Unbind these new objects, which makes the default frame buffer the
+    // target for rendering.
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  
+    return frameBuffer;
+  }
 
 function main() {
 
@@ -18,10 +63,14 @@ function main() {
         return;
     }
 
+    // get the extension to implement saving depth buffer to texture
+    var ext = gl.getExtension('WEBGL_depth_texture');
+
     // enable depth testing & backface culling
     gl.enable(gl.DEPTH_TEST);
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.BACK);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
 
     let shader = new DiffuseShader(gl);
     
@@ -97,69 +146,56 @@ function main() {
     const viewMatrix = glMatrix.mat4.create();
     const cameraPosition = glMatrix.vec3.create();
 
+
     // initialise the shadow buffer
-    // const shadowDepthTextureSize = 1024;
-    // var shadowFramebuffer = gl.createFramebuffer();
-    // gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFramebuffer);
-    
-    // var shadowDepthTexture = gl.createTexture();
-    // gl.bindTexture(gl.TEXTURE_2D, shadowDepthTexture);
-    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    // gl.texImage2D(
-    //     gl.TEXTURE_2D, 0, gl.RGBA, shadowDepthTextureSize,
-    //     shadowDepthTextureSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shadowDepthTexture, 0);    
+    const shadowDepthTextureSize = 1024;
+    var shadowFramebuffer = createFrameBuffer(gl, shadowDepthTextureSize, shadowDepthTextureSize);
 
     // redraw the scene
     let render = function() {
         // SHADOW PASS
         {
-            // gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFramebuffer);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFramebuffer);
 
-            // gl.viewport(0, 0, shadowDepthTextureSize, shadowDepthTextureSize);        
-            // gl.clearColor(0, 0, 0, 1);
-            // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.viewport(0, 0, shadowDepthTextureSize, shadowDepthTextureSize);        
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            // {
-            //     const left = -4;
-            //     const right = 4;
-            //     const bottom = -4;
-            //     const top = 4;
-            //     const near = 0.1;
-            //     const far = 100;
-            //     glMatrix.mat4.ortho(projectionMatrix, left, right, bottom, top, near, far) 
-            //     gl.uniformMatrix4fv(shader["u_projectionMatrix"], false, projectionMatrix);
-            // }
+            {
+                const left = -4;
+                const right = 4;
+                const bottom = -4;
+                const top = 4;
+                const near = 0.1;
+                const far = 100;
+                glMatrix.mat4.ortho(projectionMatrix, left, right, bottom, top, near, far) 
+                gl.uniformMatrix4fv(shader["u_projectionMatrix"], false, projectionMatrix);
+            }
 
-            // // set up view matrix 
-            // {
-            //     glMatrix.mat4.identity(viewMatrix);
-            //     glMatrix.mat4.translate(viewMatrix, viewMatrix, -lightDirection[0], -lightDirection[1], -lightDirection[2]);
-            //     gl.uniformMatrix4fv(shader["u_viewMatrix"], false, viewMatrix);
-            // }
+            // set up view matrix 
+            {
+                glMatrix.mat4.identity(viewMatrix);
+                glMatrix.mat4.translate(viewMatrix, viewMatrix, -lightDirection[0], -lightDirection[1], -lightDirection[2]);
+                gl.uniformMatrix4fv(shader["u_viewMatrix"], false, viewMatrix);
+            }
 
-            // // set up lights
-            // {
-            //     gl.uniform3fv(shader["u_lightDirection"], new Float32Array(lightDirection));
-            // }
+            // set up lights
+            {
+                gl.uniform3fv(shader["u_lightDirection"], new Float32Array(lightDirection));
+            }
 
-            // // render the objects in the scene
-            // plane.render(gl, shader);
-            // cube1.render(gl, shader);
-            // cube2.render(gl, shader);
-            // cube3.render(gl, shader);
-            // cube4.render(gl, shader);
+            // render the objects in the scene
+            plane.render(gl, shader);
+            cube1.render(gl, shader);
+            cube2.render(gl, shader);
+            cube3.render(gl, shader);
+            cube4.render(gl, shader);
 
         }
 
         
         // render to the canvas
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        // clear the screen
-        gl.viewport(0, 0, canvas.width, canvas.height);        
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // // VIEW SHADOW DEPTH BUFFER
         // {
@@ -169,10 +205,16 @@ function main() {
 
         // MAIN PASS
         {
+            gl.scissor(0, 0, canvas.width/2, canvas.height);        
+
+            // clear the screen
+            gl.viewport(0, 0, canvas.width/2, canvas.height);        
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
             {
                 const fovy = Math.PI / 2;
-                const aspect = canvas.width / canvas.height;
+                const aspect = canvas.width/2 / canvas.height;
                 const near = 0.1;
                 const far = 100;
                 glMatrix.mat4.perspective(projectionMatrix, fovy, aspect, near, far);
