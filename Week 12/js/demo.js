@@ -163,17 +163,18 @@ function main() {
             cameraDistance += cameraZoomSpeed * deltaTime;
         }
 
+        const origin = [0,0,0];
         if (inputManager.keyPressed["KeyA"]) {
-            glMatrix.vec3.rotateY(lightDirection, lightDirection, [0,0,0], -lightRotationSpeed * deltaTime);
+            glMatrix.vec3.rotateY(lightDirection, lightDirection, origin, -lightRotationSpeed * deltaTime);
         }
         if (inputManager.keyPressed["KeyD"]) {
-            glMatrix.vec3.rotateY(lightDirection, lightDirection, [0,0,0], lightRotationSpeed * deltaTime);
+            glMatrix.vec3.rotateY(lightDirection, lightDirection, origin, lightRotationSpeed * deltaTime);
         }
         if (inputManager.keyPressed["KeyW"]) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, [0,0,0], lightRotationSpeed * deltaTime);
+            glMatrix.vec3.rotateX(lightDirection, lightDirection, origin, lightRotationSpeed * deltaTime);
         }
         if (inputManager.keyPressed["KeyS"]) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, [0,0,0], -lightRotationSpeed * deltaTime);
+            glMatrix.vec3.rotateX(lightDirection, lightDirection, origin, -lightRotationSpeed * deltaTime);
         }
 
 
@@ -186,6 +187,12 @@ function main() {
 
     // redraw the scene
     let render = function() {
+        // SHADOW PASS
+
+
+
+        // MAIN PASS
+
         // clear the screen
         gl.viewport(0, 0, canvas.width, canvas.height);        
         gl.clearColor(0, 0, 0, 1);
