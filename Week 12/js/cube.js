@@ -143,16 +143,22 @@ class Cube {
         glMatrix.mat4.scale(this.worldMatrix, this.worldMatrix, this.scale);
         gl.uniformMatrix4fv(shader["u_worldMatrix"], false, this.worldMatrix);
 
-        glMatrix.mat3.normalFromMat4(this.normalMatrix, this.worldMatrix);
-        gl.uniformMatrix3fv(shader["u_normalMatrix"], false, this.normalMatrix);
-
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
         gl.vertexAttribPointer(shader["a_position"], 3, gl.FLOAT, false, 0, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.normalBuffer);
-        gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);
+        if ("u_normalMatrix" in shader) {
+            glMatrix.mat3.normalFromMat4(this.normalMatrix, this.worldMatrix);
+            gl.uniformMatrix3fv(shader["u_normalMatrix"], false, this.normalMatrix);    
+        }
+        
+        if ("a_normal" in shader) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.normalBuffer);
+            gl.vertexAttribPointer(shader["a_normal"], 3, gl.FLOAT, false, 0, 0);    
+        }
 
-        gl.uniform3fv(shader["u_diffuseMaterial"], new Float32Array(this.colour));
+        if ("u_diffuseMaterial" in shader) {
+            gl.uniform3fv(shader["u_diffuseMaterial"], new Float32Array(this.colour));
+        }
 
         gl.drawArrays(gl.TRIANGLES, 0, this.points.length / 3);           
     }
