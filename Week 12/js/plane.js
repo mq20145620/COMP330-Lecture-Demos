@@ -85,12 +85,6 @@ class Plane {
         if ("u_diffuseMaterial" in shader) {
             gl.uniform3fv(shader["u_diffuseMaterial"], new Float32Array(this.colour));
         }
-
-        if ("u_texture" in shader) {
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, this.texture);
-            gl.uniform1i(shader["u_texture"], 0);    
-        }
         
         gl.drawArrays(gl.TRIANGLES, 0, this.points.length / 3);           
     }
