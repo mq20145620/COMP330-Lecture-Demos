@@ -19,7 +19,7 @@ class DepthShader extends Shader {
             precision mediump float;
 
             void main() {
-                gl_FragColor = vec4(1); 
+                gl_FragColor = gl_FragCoord;
             }
         `;
 

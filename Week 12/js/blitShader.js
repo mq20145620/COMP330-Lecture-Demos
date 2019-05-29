@@ -23,8 +23,8 @@ class BlitShader extends Shader {
             varying vec2 v_texcoords;
 
             void main() {
-               gl_FragColor = texture2D(u_texture, v_texcoords); 
-                // gl_FragColor = vec4(1,0,1,1);
+                float d = (texture2D(u_texture, v_texcoords).r + 1.0) / 2.0;
+                gl_FragColor = vec4(d,d,d,1); 
             }
         `;
 

@@ -68,16 +68,28 @@ function main() {
     }
 
     // get the extension to implement saving depth buffer to texture
-    var ext = gl.getExtension('WEBGL_depth_texture');
+    if (gl.getSupportedExtensions().indexOf("WEBGL_depth_texture") >= 0) {
+        gl.getExtension("WEBGL_depth_texture");
+    }
+    else {
+        console.error("WEBGL_depth_texture is not supported")
+    }
+
+    if (gl.getSupportedExtensions().indexOf("EXT_frag_depth") >= 0) {
+        gl.getExtension("EXT_frag_depth");
+    }
+    else {
+        console.error("EXT_frag_depth is not supported")
+    }
+
 
     // enable depth testing & backface culling
     gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.SCISSOR_TEST);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
     let sceneShader = new DiffuseShader(gl);
-    let depthShader = new DepthShader(gl);
+    let depthShader = new DiffuseShader(gl);
     let blitShader = new BlitShader(gl);
 
     // objects in scene
@@ -104,7 +116,7 @@ function main() {
     let cameraDistance = 6;
     const cameraZoomSpeed = 1; // distance per second 
 
-    const lightDirection = [0.1, 1, 0.5];
+    const lightDirection = [10, 10, 0];
     const lightRotationSpeed = Math.TAU / 10; // radians per second 
 
     // update objects in the scene
@@ -137,12 +149,6 @@ function main() {
         if (inputManager.keyPressed["KeyD"]) {
             glMatrix.vec3.rotateY(lightDirection, lightDirection, origin, lightRotationSpeed * deltaTime);
         }
-        if (inputManager.keyPressed["KeyW"]) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, origin, lightRotationSpeed * deltaTime);
-        }
-        if (inputManager.keyPressed["KeyS"]) {
-            glMatrix.vec3.rotateX(lightDirection, lightDirection, origin, -lightRotationSpeed * deltaTime);
-        }
 
 
     };
@@ -165,14 +171,14 @@ function main() {
     };
 
     function renderToShadowBuffer() {
-      
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, shadowBuffer.frameBuffer);
 
         gl.viewport(0, 0, shadowDepthTextureSize, shadowDepthTextureSize);        
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        gl.useProgram(depthShader.program);
+        depthShader.enable(gl);
 
         {
             const left = -4;
@@ -180,15 +186,14 @@ function main() {
             const bottom = -4;
             const top = 4;
             const near = 0.1;
-            const far = 100;
-            glMatrix.mat4.ortho(projectionMatrix, left, right, bottom, top, near, far) 
+            const far = 20;
+            glMatrix.mat4.ortho(projectionMatrix, left, right, bottom, top, near, far);
             gl.uniformMatrix4fv(depthShader["u_projectionMatrix"], false, projectionMatrix);
         }
 
         // set up view matrix 
         {
-            glMatrix.mat4.identity(viewMatrix);
-            glMatrix.mat4.translate(viewMatrix, viewMatrix, -lightDirection[0], -lightDirection[1], -lightDirection[2]);
+            glMatrix.mat4.lookAt(viewMatrix, lightDirection, [0,0,0], [0,1,0]);
             gl.uniformMatrix4fv(depthShader["u_viewMatrix"], false, viewMatrix);
         }
 
@@ -202,24 +207,31 @@ function main() {
         // render to the canvas
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+        depthShader.disable(gl);
     }
 
     function renderShadowBufferToScreen() {
+        gl.enable(gl.SCISSOR_TEST);
+
         gl.scissor(canvas.width/2, 0, canvas.width/2, canvas.height);        
         gl.viewport(canvas.width/2, 0, canvas.width/2, canvas.height);        
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        gl.useProgram(blitShader.program);
+        blitShader.enable(gl);
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, shadowBuffer.colourBuffer);
+        gl.bindTexture(gl.TEXTURE_2D, shadowBuffer.depthBuffer);
         gl.uniform1i(blitShader["u_texture"], 0);    
 
         depthScreen.render(gl, blitShader);        
+        gl.disable(gl.SCISSOR_TEST);
+
+        blitShader.disable(gl);
     }
 
     function renderMainPass() {
+        gl.enable(gl.SCISSOR_TEST);
         gl.scissor(0, 0, canvas.width/2, canvas.height);        
 
         // clear the screen
@@ -227,7 +239,7 @@ function main() {
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        gl.useProgram(sceneShader.program);
+        sceneShader.enable(gl);
 
         {
             const fovy = Math.PI / 2;
@@ -263,6 +275,10 @@ function main() {
         cube2.render(gl, sceneShader);
         cube3.render(gl, sceneShader);
         cube4.render(gl, sceneShader);        
+
+        gl.disable(gl.SCISSOR_TEST);
+        sceneShader.disable(gl);
+
     }
 
     // animation loop

@@ -14,7 +14,6 @@ class Shader {
         for (let i = 0; i < nAttributes; i++) {
             const name = gl.getActiveAttrib(this.program, i).name;
             this[name] = gl.getAttribLocation(this.program, name);
-            gl.enableVertexAttribArray(this[name]);
         }
 
         const nUniforms = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS);
@@ -57,5 +56,21 @@ class Shader {
         return program;
     }
     
-    
+    enable(gl) {
+        gl.useProgram(this.program);
+        const nAttributes = gl.getProgramParameter(this.program, gl.ACTIVE_ATTRIBUTES);
+        for (let i = 0; i < nAttributes; i++) {
+            const name = gl.getActiveAttrib(this.program, i).name;
+            gl.enableVertexAttribArray(this[name]);
+        }       
+    }
+
+    disable(gl) {
+        const nAttributes = gl.getProgramParameter(this.program, gl.ACTIVE_ATTRIBUTES);
+        for (let i = 0; i < nAttributes; i++) {
+            const name = gl.getActiveAttrib(this.program, i).name;
+            gl.disableVertexAttribArray(this[name]);
+        }       
+    }
+
 }
